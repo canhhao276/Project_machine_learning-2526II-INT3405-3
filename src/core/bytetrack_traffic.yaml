@@ -1,0 +1,42 @@
+# ──────────────────────────────────────────────────────────────
+# ByteTrack Custom Config — Tối ưu cho video giao thông
+# ──────────────────────────────────────────────────────────────
+#
+# So sánh với config mặc định của Ultralytics:
+#
+#   Tham số              Mặc định    Tuned     Giải thích
+#   ─────────────────    ────────    ─────     ────────────────────────────
+#   track_high_thresh     0.5        0.25      Hạ thấp → chấp nhận nhiều detection hơn
+#                                              ở giai đoạn 1, giúp không bỏ sót xe xa/nhỏ
+#   track_low_thresh      0.1        0.05      Hạ thấp → giai đoạn 2 "byte-level" cũng
+#                                              chấp nhận detection rất yếu để cứu track
+#   new_track_thresh      0.6        0.3       Hạ thấp → tạo track mới dễ hơn cho xe
+#                                              mới xuất hiện ở rìa khung hình
+#   track_buffer          30         60        Tăng → giữ track "mất tích" lâu hơn (2 giây
+#                                              ở 30fps), Kalman Filter dự đoán vị trí
+#   match_thresh          0.8        0.85      Tăng nhẹ → matching khắt khe hơn,
+#                                              tránh ghép nhầm 2 xe gần nhau
+#   fuse_score            True       True      Kết hợp conf vào IoU khi matching
+
+tracker_type: bytetrack
+
+# Giai đoạn 1: Ghép detection confidence CAO với track đang active
+track_high_thresh: 0.25
+
+# Giai đoạn 2: Thử ghép lại track chưa match với detection confidence THẤP
+track_low_thresh: 0.05
+
+# Ngưỡng tối thiểu để khởi tạo track MỚI
+# Đặt CAO (0.6) để chỉ detection rõ ràng mới tạo track → tránh ID rác
+# Detection yếu vẫn được dùng ở giai đoạn 2 để cứu track đã tồn tại
+new_track_thresh: 0.6
+
+# Số frame giữ track "lost" trước khi xóa vĩnh viễn
+# 60 frames ≈ 2 giây ở 30fps → đủ thời gian xe bị che rồi xuất hiện lại
+track_buffer: 60
+
+# Ngưỡng IoU cho Hungarian matching
+match_thresh: 0.85
+
+# Kết hợp detection confidence vào IoU score khi matching
+fuse_score: true

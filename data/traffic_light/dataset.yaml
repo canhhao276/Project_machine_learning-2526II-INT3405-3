@@ -1,0 +1,13 @@
+# YOLOv8 Dataset Configuration for Roboflow Traffic Light Dataset (4-Class Color Detector)
+# Generated automatically to work seamlessly with train.py
+
+path: C:/Project_uni/ML_project/data/traffic_light/datasets
+train: train/images
+val: valid/images
+test: test/images
+
+names:
+  0: green
+  1: off
+  2: red
+  3: yellow

@@ -1,0 +1,46 @@
+# Red Light Violation Detection System Configuration
+
+# Deep Learning Models
+models:
+  vehicle_model: "yolov8s.pt"         # Path to YOLOv8 vehicle detection model (yolov8s.pt is optimized for accuracy & speed)
+  traffic_light_model: "src/models/traffic_light_best.pt"   # [Custom Model Mode] Đổi thành "yolov8s.pt" nếu test video main.mp4 (góc đèn xa/nhỏ)
+
+# Detection Thresholds
+thresholds:
+  vehicle_conf: 0.35                  # Confidence threshold for vehicles
+  traffic_light_conf: 0.05            # Confidence threshold rất thấp — để model bắt được đèn nhỏ/xa; HSV sẽ lọc màu chính xác
+  iou: 0.45                           # Intersection over Union threshold
+
+# Tracking Configuration (ByteTrack)
+tracking:
+  tracker_type: "bytetrack"           # Tracking algorithm
+  conf: 0.1                           # Minimum detection confidence for tracking
+  iou: 0.5                            # IOU threshold for association
+  track_buffer: 30                    # Number of frames to keep lost tracks in memory
+
+# Traffic Scene Parameters
+scene:
+  # Coordinates of the Stop Line (x1, y1, x2, y2)
+  # When a vehicle crossed this line while the light is red, a violation is detected.
+  # Format: [x1, y1, x2, y2] relative to resolution, e.g. [0, 450, 1920, 450]
+  stop_line: [200, 600, 1200, 600]
+  
+  # Direction of movement ('up', 'down', 'left', 'right')
+  # Useful to know if crossing means y-coordinate increases or decreases.
+  movement_direction: "down"
+
+  # Traffic Light Region of Interest (ROI) [x1, y1, x2, y2]
+  # Đặt tọa độ cố định [x1, y1, x2, y2] để khóa chặt vùng đèn (ví dụ main.mp4: [1355, 10, 1405, 300])
+  # Để [] (rỗng) để YOLOv8 tự động phát hiện đèn ở BẤT KỲ vị trí nào trong khung hình
+  traffic_light_roi: []
+  
+  # Cố định hộp đèn giao thông dọc 100% (bỏ qua YOLO dò tìm để tránh chập chờn/nhảy loạn)
+  static_traffic_lights: [[1202, 35, 1228, 145]]
+
+# Output Configurations
+output:
+  save_video: true                    # Save the visual result to output directory
+  output_video_path: "data/output/result_video.mp4"
+  save_logs: true                     # Save violation logs to JSON
+  json_log_path: "data/output/violations.json"
+  webhook_url: ""                     # Webhook endpoint to notify other systems

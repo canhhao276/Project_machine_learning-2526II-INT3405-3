@@ -1,0 +1,30 @@
+# Caches and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Deep Learning weights & runs (HUGE files)
+*.pt
+*.pth
+*.onnx
+*.engine
+runs/
+
+# Large videos and media files
+*.mp4
+*.avi
+*.mkv
+*.mov
+
+# Local data & outputs
+data/output/*
+!data/output/.gitkeep
+data/traffic_light/datasets/
