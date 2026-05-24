@@ -13,6 +13,7 @@ env/
 
 # Deep Learning weights & runs (HUGE files)
 *.pt
+!src/models/traffic_light_best.pt
 *.pth
 *.onnx
 *.engine
