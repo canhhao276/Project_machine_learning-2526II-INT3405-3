@@ -62,10 +62,14 @@ def run_pipeline(video_path: str, show_preview: bool = False):
     print("[Core] Setting up rule engines & violation bounds...")
     violation_detector = ViolationDetector(
         stop_line=config.stop_line,
+        right_turn_zone=config.right_turn_zone,
         movement_direction=config.movement_direction
     )
     
-    visualizer = Visualizer(stop_line=config.stop_line)
+    visualizer = Visualizer(
+        stop_line=config.stop_line,
+        right_turn_zone=config.right_turn_zone
+    )
     
     exporter = ViolationExporter(
         json_path=config.json_log_path,
