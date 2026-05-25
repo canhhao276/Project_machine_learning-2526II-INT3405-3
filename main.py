@@ -14,16 +14,18 @@ from src.core.violation_detector import ViolationDetector
 from src.utils.visualization import Visualizer
 from src.api.exporter import ViolationExporter
 
-def run_pipeline(video_path: str, show_preview: bool = False):
+
+def run_pipeline(video_path: str, show_preview: bool = False,
+                 total_actual: int = None, true_positives: int = None,
+                 false_positives: int = None):
     """
-    Main pipeline function that orchestrates all computer vision and AI modules.
+    Main pipeline. Sau khi chạy xong, truyền kết quả đối chiếu thủ công
+    (total_actual, true_positives, false_positives) để in Precision/Recall.
     """
     print("=" * 60)
     print("  INITIALIZING TRAFFIC RED LIGHT VIOLATION DETECTION SYSTEM  ")
     print("=" * 60)
     
-    # 1. Load Configurations
-    print("[System] Loading configuration file...")
     config = SystemConfig("config.yaml")
     
     # Override video path if supplied via argument
@@ -62,18 +64,25 @@ def run_pipeline(video_path: str, show_preview: bool = False):
     print("[Core] Setting up rule engines & violation bounds...")
     violation_detector = ViolationDetector(
         stop_line=config.stop_line,
+        right_turn_zone=config.right_turn_zone,
         movement_direction=config.movement_direction
     )
     
-    visualizer = Visualizer(stop_line=config.stop_line)
+    visualizer = Visualizer(
+        stop_line=config.stop_line,
+        right_turn_zone=config.right_turn_zone
+    )
     
+    # ── THÀNH VIÊN 3: khởi tạo exporter ─────────────────────
     exporter = ViolationExporter(
         json_path=config.json_log_path,
-        webhook_url=config.webhook_url
+        webhook_url=config.webhook_url,
+        root_dir="Luutru_Vipham",
+        save_crops=True,
     )
     
     print("=" * 60)
-    print("  PIPELINE READY: COMMENCING FRAME PROCESSING ")
+    print("  PIPELINE READY — PROCESSING FRAMES")
     print("=" * 60)
     
     if show_preview:
@@ -85,27 +94,27 @@ def run_pipeline(video_path: str, show_preview: bool = False):
         for frame in video_handler.frame_generator():
             frame_idx += 1
             
-            # A. Detect Traffic Lights and classify dominant intersection state
+            # A. Đèn giao thông
             lights = traffic_light_detector.detect_and_classify(frame)
             global_light_state = traffic_light_detector.get_global_traffic_light_state(lights)
             
-            # B. Track vehicle bounding boxes across consecutive frames using ByteTrack
+            # B. Bám vết xe
             tracked_vehicles = vehicle_tracker.track(frame)
             
-            # C. Detect violations at stop line when light is RED
+            # C. Phát hiện vi phạm
             new_violations = violation_detector.process_frame(
                 tracked_vehicles=tracked_vehicles,
                 traffic_light_state=global_light_state,
                 frame_idx=frame_idx
             )
             
-            # D. Export events if new violations detected
+            # D. Xuất vi phạm — TRUYỀN FRAME GỐC để crop ảnh
             for violation in new_violations:
-                print(f"[VIOLATION DETECTED] Vehicle ID #{violation['vehicle_id']} "
-                      f"({violation['vehicle_type'].upper()}) ran red light at Frame {frame_idx}!")
-                exporter.export_event(violation)
+                print(f"[VIOLATION] Vehicle ID #{violation['vehicle_id']} "
+                      f"({violation['vehicle_type'].upper()}) at Frame {frame_idx}")
+                exporter.export_event(violation, frame=frame)   # ← truyền frame
                 
-            # E. Draw visualization HUD overlays
+            # E. Vẽ overlay
             annotated_frame = visualizer.draw_scene(
                 frame=frame,
                 tracked_vehicles=tracked_vehicles,
@@ -115,11 +124,14 @@ def run_pipeline(video_path: str, show_preview: bool = False):
                 active_violations=new_violations
             )
             
-            # F. Write annotated frame to disk
+            # F. Ghi video output
             if config.save_video:
                 video_handler.write_frame(annotated_frame)
                 
-            # G. Display visual preview if requested
+            # G. FPS tracker tick
+            exporter.fps_tracker.tick()
+
+            # H. Preview
             if show_preview:
                 cv2.imshow("Red Light Violation System - Live Preview", annotated_frame)
                 # Press 'q' to abort execution
@@ -129,8 +141,9 @@ def run_pipeline(video_path: str, show_preview: bool = False):
                     
             if frame_idx % 50 == 0 or frame_idx == total_frames:
                 progress = (frame_idx / total_frames) * 100 if total_frames > 0 else 0
-                print(f"[Progress] Frame {frame_idx}/{total_frames} processed ({progress:.1f}%) | "
-                      f"Active Violations: {len(violation_detector.violated_vehicles)}")
+                print(f"[Progress] {frame_idx}/{total_frames} ({progress:.1f}%) | "
+                      f"FPS: {exporter.fps_tracker.get_fps():.1f} | "
+                      f"Violations: {len(violation_detector.violated_vehicles)}")
                       
     except KeyboardInterrupt:
         print("[System] Execution interrupted by manual keyboard signal.")
@@ -140,19 +153,38 @@ def run_pipeline(video_path: str, show_preview: bool = False):
         if show_preview:
             cv2.destroyAllWindows()
             
-        print("\n" + "=" * 60)
-        print("  PROCESS COMPLETED SUCCESSFULLY  ")
+        # ── THÀNH VIÊN 3: in báo cáo tổng kết ───────────────
+        exporter.print_summary(
+            total_actual=total_actual,
+            true_positives=true_positives,
+            false_positives=false_positives,
+        )
+
         print("=" * 60)
-        print(f"Total processed frames: {frame_idx}")
-        print(f"Total violations logged: {len(violation_detector.violated_vehicles)}")
-        print(f"Violation report exported to: {config.json_log_path}")
-        print(f"Visualized video output saved to: {config.output_video_path}")
+        print(f"  Frames processed : {frame_idx}")
+        print(f"  Violations logged: {exporter.get_total_violations()}")
+        print(f"  JSON  → {config.json_log_path}")
+        print(f"  Video → {config.output_video_path}")
         print("=" * 60)
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Traffic Red Light Violation Detection Pipeline")
-    parser.add_argument("--video", type=str, default="", help="Path to input traffic video file")
-    parser.add_argument("--preview", action="store_true", help="Display real-time visual output window")
+    parser = argparse.ArgumentParser(description="Traffic Red Light Violation Detection")
+    parser.add_argument("--video", type=str, default="")
+    parser.add_argument("--preview", action="store_true")
+    # ── Thành viên 3: tham số đối chiếu thủ công ──
+    parser.add_argument("--total-actual", type=int, default=None,
+                        help="Tổng số vi phạm thực tế (đếm tay khi xem video)")
+    parser.add_argument("--true-positives", type=int, default=None,
+                        help="Số vi phạm hệ thống bắt đúng")
+    parser.add_argument("--false-positives", type=int, default=None,
+                        help="Số vi phạm hệ thống báo nhầm")
     args = parser.parse_args()
     
-    run_pipeline(video_path=args.video, show_preview=args.preview)
+    run_pipeline(
+        video_path=args.video,
+        show_preview=args.preview,
+        total_actual=args.total_actual,
+        true_positives=args.true_positives,
+        false_positives=args.false_positives,
+    )

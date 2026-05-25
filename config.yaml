@@ -18,8 +18,11 @@ tracking:
 
 # Traffic Scene Parameters
 scene:
-  stop_line: [200, 600, 1200, 600]
+  stop_line: [500, 495, 1080, 495]
   movement_direction: "down"
+  
+  # Polygon hình thang cho phép rẽ phải khi đèn đỏ (rộng trên, hẹp dưới)
+  right_turn_zone: [[950, 200], [1200, 200], [1100, 495], [1080, 495]]
   
   # Cho phép YOLOv8 tự động phát hiện đèn ở BẤT KỲ vị trí nào trong khung hình
   traffic_light_roi: []

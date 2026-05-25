@@ -1,16 +1,21 @@
 import cv2
 import numpy as np
 from typing import List, Dict, Any
+from src.utils.overlay import OverlayManager
+from src.core.zones import RightTurnZone
 
 class Visualizer:
     """
     Visualizer phục vụ Thành viên 1 hiển thị kết quả AI (Hộp đèn cố định và tracking xe).
-    ========================================================================
-    [PHẦN VẼ VẠCH DỪNG ẢO VÀ ĐA GIÁC RẼ PHẢI LÀ NHIỆM VỤ CỦA THÀNH VIÊN 2]
-    ========================================================================
+    Và được Thành viên 2 cập nhật hiển thị vẽ UI Overlay.
     """
-    def __init__(self, stop_line: List[int]):
+    def __init__(self, stop_line: List[int], right_turn_zone: List[List[int]] = None):
         self.stop_line = stop_line
+        
+        # Determine polygon
+        rt_zone_pts = right_turn_zone if right_turn_zone else [[1000, 600], [1200, 600], [1200, 720], [1000, 720]]
+        self.right_turn_zone_poly = RightTurnZone(rt_zone_pts).get_polygon()
+        
         self.COLORS = {
             "RED": (0, 0, 255),
             "YELLOW": (0, 255, 255),
@@ -30,6 +35,14 @@ class Visualizer:
     ) -> np.ndarray:
         canvas = frame.copy()
         
+        # Vẽ vạch dừng ảo (Thành viên 2)
+        pt1 = (self.stop_line[0], self.stop_line[1])
+        pt2 = (self.stop_line[2], self.stop_line[3])
+        OverlayManager.draw_stop_line(canvas, pt1, pt2, global_light_state)
+        
+        # Vẽ đa giác rẽ phải (Thành viên 2)
+        OverlayManager.draw_right_turn_zone(canvas, self.right_turn_zone_poly)
+        
         # 1. Vẽ Traffic Lights (AI của Thành viên 1)
         for light in traffic_lights:
             box = light["box"]
@@ -41,22 +54,26 @@ class Visualizer:
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2
             )
             
-        # 2. Vẽ Tracked Vehicles (AI của Thành viên 1)
+        # 2. Vẽ Tracked Vehicles (AI của Thành viên 1) + Vi phạm (Thành viên 2)
         for vehicle in tracked_vehicles:
             v_id = vehicle["id"]
             box = vehicle["box"]
             cls_name = vehicle["class_name"]
             
-            color = self.COLORS["VEHICLE"]
-            cv2.rectangle(canvas, (box[0], box[1]), (box[2], box[3]), color, 2)
-            
-            label = f"ID: {v_id} {cls_name.upper()}"
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            cv2.rectangle(canvas, (box[0], box[1] - h - 10), (box[0] + w, box[1]), color, -1)
-            cv2.putText(
-                canvas, label, (box[0], box[1] - 5),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2
-            )
+            # Kiểm tra nếu xe vi phạm
+            if v_id in violated_ids:
+                OverlayManager.draw_violation_alert(canvas, box)
+            else:
+                color = self.COLORS["VEHICLE"]
+                cv2.rectangle(canvas, (box[0], box[1]), (box[2], box[3]), color, 2)
+                
+                label = f"ID: {v_id} {cls_name.upper()}"
+                (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+                cv2.rectangle(canvas, (box[0], box[1] - h - 10), (box[0] + w, box[1]), color, -1)
+                cv2.putText(
+                    canvas, label, (box[0], box[1] - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2
+                )
             
         # 3. HUD hiển thị trạng thái đèn
         hud_bg = canvas.copy()
@@ -74,7 +91,5 @@ class Visualizer:
             cv2.FONT_HERSHEY_SIMPLEX, 0.8, light_color, 2
         )
         cv2.circle(canvas, (320, 62), 15, light_color, -1)
-        
-        # [PHẦN VẼ VẠCH DỪNG ẢO, ĐA GIÁC RẼ PHẢI VÀ WARNING BANNERS LÀ NHIỆM VỤ CỦA THÀNH VIÊN 2]
         
         return canvas
