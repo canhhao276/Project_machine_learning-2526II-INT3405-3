@@ -8,7 +8,7 @@ class VideoStreamHandler:
     Handles file checks, property retrieval, and seamless frame output.
     """
     
-    def __init__(self, input_path: str):
+    def __init__(self, input_path: str, target_size: Optional[Tuple[int, int]] = None):
         """
         Initializes the video capture stream.
         """
@@ -22,8 +22,13 @@ class VideoStreamHandler:
             raise IOError(f"Failed to open video file: {input_path}")
             
         # Retrieve stream specs
-        self.width: int = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height: int = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.target_size = target_size
+        if target_size:
+            self.width, self.height = target_size
+        else:
+            self.width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
         self.fps: float = self.cap.get(cv2.CAP_PROP_FPS)
         self.total_frames: int = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
@@ -43,6 +48,8 @@ class VideoStreamHandler:
             ret, frame = self.cap.read()
             if not ret:
                 break
+            if self.target_size:
+                frame = cv2.resize(frame, self.target_size)
             yield frame
             
         self.release_input()

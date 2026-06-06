@@ -39,53 +39,41 @@ class TrafficLightDetector:
         h_f, w_f = frame.shape[:2]
         
         if self.static_lights and len(self.static_lights) > 0:
-            yolo_lights = []
-            if self.is_custom_model:
-                results = self.model.predict(source=frame, conf=0.01, verbose=False)
-                if len(results) > 0 and results[0].boxes is not None:
-                    for b in results[0].boxes:
-                        bx = b.xyxy[0].cpu().numpy()
-                        bconf = float(b.conf[0].cpu().numpy())
-                        bcid = int(b.cls[0].cpu().numpy())
-                        bcname = self.model.names[bcid].lower()
-                        
-                        bstate = "UNKNOWN"
-                        if 'red' in bcname or 'stop' in bcname: bstate = "RED"
-                        elif 'green' in bcname or 'go' in bcname: bstate = "GREEN"
-                        elif 'yellow' in bcname or 'warning' in bcname: bstate = "YELLOW"
-                            
-                        yolo_lights.append({
-                            "box": [int(bx[0]), int(bx[1]), int(bx[2]), int(bx[3])],
-                            "state": bstate,
-                            "conf": bconf
-                        })
-
             for box in self.static_lights:
                 x1, y1, x2, y2 = [int(v) for v in box]
                 crop = frame[max(0, y1):min(h_f, y2), max(0, x1):min(w_f, x2)]
                 
+                state = "UNKNOWN"
+                
                 if self.is_custom_model:
-                    state = "UNKNOWN"
-                    if len(yolo_lights) > 0:
-                        best_match = None
-                        best_dist = 9999
-                        cx_static, cy_static = (x1 + x2) / 2, (y1 + y2) / 2
-                        
-                        for yl in yolo_lights:
-                            cx_yolo = (yl["box"][0] + yl["box"][2]) / 2
-                            cy_yolo = (yl["box"][1] + yl["box"][3]) / 2
-                            dist = np.sqrt((cx_static - cx_yolo)**2 + (cy_static - cy_yolo)**2)
-                            
-                            if dist < 60 and yl["state"] != "UNKNOWN" and dist < best_dist:
-                                best_dist = dist
-                                best_match = yl
-                                    
-                        if best_match is not None:
-                            state = best_match["state"]
+                    # Bước 1: Chạy model trên vùng crop mở rộng quanh khung đèn cố định
+                    # Không mở rộng lên trên để tránh đồng hồ đếm ngược gây nhiễu
+                    ext_y1 = max(0, y1 - 3)
+                    ext_y2 = min(h_f, y2 + 25)
+                    ext_x1 = max(0, x1 - 20)
+                    ext_x2 = min(w_f, x2 + 20)
+                    crop_ext = frame[ext_y1:ext_y2, ext_x1:ext_x2]
                     
-                    if state == "UNKNOWN":
-                        state = self._classify_state(crop)
-                else:
+                    if crop_ext.size > 0:
+                        crop_results = self.model.predict(source=crop_ext, conf=0.1, verbose=False)
+                        if len(crop_results) > 0 and crop_results[0].boxes is not None:
+                            best_conf = 0
+                            for b in crop_results[0].boxes:
+                                bcid = int(b.cls[0].cpu().numpy())
+                                bcname = self.model.names[bcid].lower()
+                                bconf = float(b.conf[0].cpu().numpy())
+                                
+                                bstate = "UNKNOWN"
+                                if 'red' in bcname or 'stop' in bcname: bstate = "RED"
+                                elif 'green' in bcname or 'go' in bcname: bstate = "GREEN"
+                                elif 'yellow' in bcname or 'warning' in bcname: bstate = "YELLOW"
+                                
+                                if bstate != "UNKNOWN" and bconf > best_conf:
+                                    best_conf = bconf
+                                    state = bstate
+                
+                # Bước 2: Fallback bằng phân tích màu HSV nếu model không nhận diện được
+                if state == "UNKNOWN":
                     state = self._classify_state(crop)
                 
                 lights.append({"box": [x1, y1, x2, y2], "conf": 1.0, "state": state})
@@ -167,11 +155,11 @@ class TrafficLightDetector:
         hsv = cv2.cvtColor(processed, cv2.COLOR_BGR2HSV)
         
         mask_red = cv2.bitwise_or(
-            cv2.inRange(hsv, np.array([0, 12, 60]), np.array([10, 255, 255])),
-            cv2.inRange(hsv, np.array([165, 12, 60]), np.array([180, 255, 255]))
+            cv2.inRange(hsv, np.array([0, 30, 60]), np.array([4, 255, 255])),
+            cv2.inRange(hsv, np.array([170, 30, 60]), np.array([180, 255, 255]))
         )
-        mask_yellow = cv2.inRange(hsv, np.array([11, 35, 60]), np.array([33, 255, 255]))
-        mask_green = cv2.inRange(hsv, np.array([35, 35, 60]), np.array([90, 255, 255]))
+        mask_yellow = cv2.inRange(hsv, np.array([5, 30, 60]), np.array([25, 255, 255]))
+        mask_green = cv2.inRange(hsv, np.array([35, 30, 60]), np.array([90, 255, 255]))
         
         r_p, y_p, g_p = cv2.countNonZero(mask_red), cv2.countNonZero(mask_yellow), cv2.countNonZero(mask_green)
         max_pixels = max(r_p, y_p, g_p)
@@ -188,11 +176,11 @@ class TrafficLightDetector:
             mx, my = max_loc
             neighborhood_hsv = hsv[max(0, my-1):min(h, my+2), max(0, mx-1):min(w, mx+2)]
             n_red = cv2.countNonZero(cv2.bitwise_or(
-                cv2.inRange(neighborhood_hsv, np.array([0, 12, 60]), np.array([10, 255, 255])),
-                cv2.inRange(neighborhood_hsv, np.array([165, 12, 60]), np.array([180, 255, 255]))
+                cv2.inRange(neighborhood_hsv, np.array([0, 30, 60]), np.array([4, 255, 255])),
+                cv2.inRange(neighborhood_hsv, np.array([170, 30, 60]), np.array([180, 255, 255]))
             ))
-            n_yellow = cv2.countNonZero(cv2.inRange(neighborhood_hsv, np.array([11, 35, 60]), np.array([33, 255, 255])))
-            n_green = cv2.countNonZero(cv2.inRange(neighborhood_hsv, np.array([35, 35, 60]), np.array([90, 255, 255])))
+            n_yellow = cv2.countNonZero(cv2.inRange(neighborhood_hsv, np.array([5, 30, 60]), np.array([25, 255, 255])))
+            n_green = cv2.countNonZero(cv2.inRange(neighborhood_hsv, np.array([35, 30, 60]), np.array([90, 255, 255])))
             
             if max(n_red, n_yellow, n_green) > 0:
                 if n_red >= n_yellow and n_red >= n_green: return "RED"

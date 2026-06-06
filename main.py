@@ -2,6 +2,7 @@ import os
 import sys
 import argparse
 import cv2
+import time
 
 # Add src folder to sys.path to allow clean imports
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
@@ -37,7 +38,8 @@ def run_pipeline(video_path: str, show_preview: bool = False,
         
     # 2. Initialize Video Stream Handler
     print(f"[System] Opening video file: {input_video}")
-    video_handler = VideoStreamHandler(input_video)
+    target_size = tuple(config.target_resolution) if config.target_resolution else None
+    video_handler = VideoStreamHandler(input_video, target_size=target_size)
     width, height, fps, total_frames = video_handler.get_properties()
     print(f"[Video Details] Resolution: {width}x{height} | FPS: {fps} | Total Frames: {total_frames}")
     
@@ -89,6 +91,7 @@ def run_pipeline(video_path: str, show_preview: bool = False,
         cv2.namedWindow("Red Light Violation System - Live Preview", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Red Light Violation System - Live Preview", 960, 540)
         
+    pipeline_start_time = time.time()
     frame_idx = 0
     try:
         for frame in video_handler.frame_generator():
@@ -131,13 +134,26 @@ def run_pipeline(video_path: str, show_preview: bool = False,
             # G. FPS tracker tick
             exporter.fps_tracker.tick()
 
-            # H. Preview
+            # H. Preview with real-time speed synchronization
             if show_preview:
-                cv2.imshow("Red Light Violation System - Live Preview", annotated_frame)
-                # Press 'q' to abort execution
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    print("[System] Execution aborted by user.")
-                    break
+                elapsed_time = time.time() - pipeline_start_time
+                expected_video_time = frame_idx / fps
+                
+                # If processing is faster than real-time, sleep to maintain 1.0x playback speed
+                if elapsed_time < expected_video_time:
+                    time.sleep(expected_video_time - elapsed_time)
+                    cv2.imshow("Red Light Violation System - Live Preview", annotated_frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        print("[System] Execution aborted by user.")
+                        break
+                else:
+                    # If processing is slower, skip cv2.imshow for some frames to catch up to real-time speed,
+                    # showing at least every 3rd frame to ensure visibility.
+                    if (elapsed_time - expected_video_time) < 0.15 or frame_idx % 3 == 0:
+                        cv2.imshow("Red Light Violation System - Live Preview", annotated_frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            print("[System] Execution aborted by user.")
+                            break
                     
             if frame_idx % 50 == 0 or frame_idx == total_frames:
                 progress = (frame_idx / total_frames) * 100 if total_frames > 0 else 0

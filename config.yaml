@@ -18,17 +18,20 @@ tracking:
 
 # Traffic Scene Parameters
 scene:
-  stop_line: [500, 495, 1080, 495]
-  movement_direction: "down"
+  stop_line: [533, 486, 1126, 486]
+  movement_direction: "up"
   
   # Polygon hình thang cho phép rẽ phải khi đèn đỏ (rộng trên, hẹp dưới)
-  right_turn_zone: [[950, 200], [1200, 200], [1100, 495], [1080, 495]]
+  right_turn_zone: [[972, 243], [1280, 243], [1280, 486], [972, 486]]
   
   # Cho phép YOLOv8 tự động phát hiện đèn ở BẤT KỲ vị trí nào trong khung hình
   traffic_light_roi: []
   
   # Đã xóa tọa độ cố định để AI tự động dò tìm hộp đèn động theo thời gian thực
-  static_traffic_lights: [[1196, 58, 1234, 160]]
+  static_traffic_lights: [[1220, 66, 1260, 160]]
+  
+  # Độ phân giải chuẩn hóa mục tiêu cho tất cả video đầu vào
+  target_resolution: [1280, 720]
 
 # Output Configurations
 output:

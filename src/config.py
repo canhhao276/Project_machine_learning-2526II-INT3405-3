@@ -29,6 +29,7 @@ class SystemConfig:
         self.right_turn_zone: List[List[int]] = self.scene.get("right_turn_zone", [[950, 200], [1200, 200], [1100, 495], [1080, 495]])
         self.traffic_light_roi: List[int] = self.scene.get("traffic_light_roi", [])
         self.static_traffic_lights: List[List[int]] = self.scene.get("static_traffic_lights", [])
+        self.target_resolution: List[int] = self.scene.get("target_resolution", [])
         
         self.save_video: bool = self.output.get("save_video", True)
         self.output_video_path: str = self.output.get("output_video_path", "data/output/result_video.mp4")
