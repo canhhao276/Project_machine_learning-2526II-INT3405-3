@@ -395,6 +395,47 @@ class ViolationExporter:
                 "crop_path":    record["crop_path"],
             })
 
+    def _rewrite_csv(self) -> None:
+        with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=self._csv_fields())
+            writer.writeheader()
+            for record in self._violations:
+                writer.writerow({
+                    "vehicle_id":   record["vehicle_id"],
+                    "vehicle_type": record["vehicle_type"],
+                    "frame":        record["frame"],
+                    "timestamp":    record["timestamp"],
+                    "datetime":     record["datetime"],
+                    "confidence":   record["confidence"],
+                    "bbox":         str(record["bbox"]),
+                    "crop_path":    record["crop_path"],
+                })
+
+    def remove_violation(self, vehicle_id: int) -> bool:
+        removed = False
+        remaining = []
+
+        for record in self._violations:
+            if record["vehicle_id"] == vehicle_id:
+                removed = True
+                crop_path = record.get("crop_path", "")
+                if crop_path and os.path.exists(crop_path):
+                    try:
+                        os.remove(crop_path)
+                        print(f"[Exporter] ✓ Đã xóa ảnh vi phạm: {crop_path}")
+                    except Exception as e:
+                        print(f"[Exporter] ✗ Không xóa được ảnh {crop_path}: {e}")
+                continue
+            remaining.append(record)
+
+        if not removed:
+            return False
+
+        self._violations = remaining
+        self._write_json()
+        self._rewrite_csv()
+        return True
+
     def _post_webhook(self, record: Dict[str, Any]) -> None:
         try:
             import requests

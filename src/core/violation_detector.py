@@ -1,5 +1,5 @@
 from src.core.geometry import is_point_in_polygon
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 import time
 
 from src.core.zones import StopLine, RightTurnZone
@@ -36,14 +36,15 @@ class ViolationDetector:
     def violated_vehicles(self):
         return self._violated_vehicles
 
-    def process_frame(self, tracked_vehicles: List[Dict[str, Any]], traffic_light_state: str, frame_idx: int) -> List[Dict[str, Any]]:
+    def process_frame(self, tracked_vehicles: List[Dict[str, Any]], traffic_light_state: str, frame_idx: int) -> Tuple[List[Dict[str, Any]], List[int]]:
         new_violations = []
+        cancelled_violations = []
         
         for vehicle in tracked_vehicles:
-            is_violation = self.manager.update_and_check(vehicle, traffic_light_state)
+            result = self.manager.update_and_check(vehicle, traffic_light_state)
+            v_id = vehicle["id"]
             
-            if is_violation:
-                v_id = vehicle["id"]
+            if result == "violation":
                 self._violated_vehicles.add(v_id)
                 
                 violation_record = {
@@ -56,8 +57,15 @@ class ViolationDetector:
                 }
                 self.violations_log.append(violation_record)
                 new_violations.append(violation_record)
+            elif result == "cancel":
+                self._violated_vehicles.discard(v_id)
+                self._remove_violation_record(v_id)
+                cancelled_violations.append(v_id)
                 
-        return new_violations
+        return new_violations, cancelled_violations
+
+    def _remove_violation_record(self, vehicle_id: int) -> None:
+        self.violations_log = [record for record in self.violations_log if record["vehicle_id"] != vehicle_id]
 
     def get_all_violations(self) -> List[Dict[str, Any]]:
         return self.violations_log

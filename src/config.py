@@ -24,9 +24,9 @@ class SystemConfig:
         
         self.tracker_type: str = self.tracking.get("tracker_type", "bytetrack")
         
-        self.stop_line: List[int] = self.scene.get("stop_line", [500, 495, 1080, 495])
+        self.stop_line: List[int] = self.scene.get("stop_line", [533, 486, 1126, 486])
         self.movement_direction: str = self.scene.get("movement_direction", "down")
-        self.right_turn_zone: List[List[int]] = self.scene.get("right_turn_zone", [[950, 200], [1200, 200], [1100, 495], [1080, 495]])
+        self.right_turn_zone: List[List[int]] = self.scene.get("right_turn_zone", [[1025, 150], [1200, 150], [1126, 486], [1075, 486]])
         self.traffic_light_roi: List[int] = self.scene.get("traffic_light_roi", [])
         self.static_traffic_lights: List[List[int]] = self.scene.get("static_traffic_lights", [])
         self.target_resolution: List[int] = self.scene.get("target_resolution", [])

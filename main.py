@@ -105,7 +105,7 @@ def run_pipeline(video_path: str, show_preview: bool = False,
             tracked_vehicles = vehicle_tracker.track(frame)
             
             # C. Phát hiện vi phạm
-            new_violations = violation_detector.process_frame(
+            new_violations, cancelled_violations = violation_detector.process_frame(
                 tracked_vehicles=tracked_vehicles,
                 traffic_light_state=global_light_state,
                 frame_idx=frame_idx
@@ -116,6 +116,11 @@ def run_pipeline(video_path: str, show_preview: bool = False,
                 print(f"[VIOLATION] Vehicle ID #{violation['vehicle_id']} "
                       f"({violation['vehicle_type'].upper()}) at Frame {frame_idx}")
                 exporter.export_event(violation, frame=frame)   # ← truyền frame
+
+            # E. Hủy vi phạm khi xe đi vào vùng rẽ phải sau khi đã bị đánh dấu
+            for vehicle_id in cancelled_violations:
+                print(f"[CANCEL] Vehicle ID #{vehicle_id} entered right-turn zone, removing previous violation")
+                exporter.remove_violation(vehicle_id)
                 
             # E. Vẽ overlay
             annotated_frame = visualizer.draw_scene(

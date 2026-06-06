@@ -26,13 +26,14 @@ class ViolationManager:
         self.vehicle_history: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
         self.HISTORY_LENGTH = 15
         
-        # Set chứa các ID đã bị báo vi phạm => cooldown vĩnh viễn trong 1 session
-        self.reported_ids: Set[int] = set()
+        # Set chứa các ID đã bị báo vi phạm trong session
+        self.violated_ids: Set[int] = set()
+        self.canceled_ids: Set[int] = set()
 
-    def update_and_check(self, vehicle: Dict[str, Any], light_state: str) -> bool:
+    def update_and_check(self, vehicle: Dict[str, Any], light_state: str) -> str:
         """
-        Cập nhật lịch sử xe và kiểm tra vi phạm.
-        Returns True nếu phát hiện vi phạm MỚI.
+        Cập nhật lịch sử xe và kiểm tra trạng thái vi phạm.
+        Trả về "violation", "cancel" hoặc "none".
         """
         v_id = vehicle["id"]
         bbox = vehicle["box"]
@@ -43,34 +44,39 @@ class ViolationManager:
         if len(self.vehicle_history[v_id]) > self.HISTORY_LENGTH:
             self.vehicle_history[v_id].pop(0)
             
-        # === BƯỚC 2: Cooldown - đã báo rồi thì bỏ qua ===
-        if v_id in self.reported_ids:
-            return False
-            
-        # === BƯỚC 3: Chỉ xét khi đèn ĐỎ ===
-        if light_state.upper() != "RED":
-            return False
-            
-        # === BƯỚC 4: Cần ít nhất 2 điểm lịch sử ===
+        # Nếu xe đã bị hủy vi phạm trước đó thì bỏ qua luôn
+        if v_id in self.canceled_ids:
+            return "none"
+
         history = self.vehicle_history[v_id]
         if len(history) < 2:
-            return False
-            
-        # === BƯỚC 5: Direction filtering - chỉ bắt xe đi đúng hướng ===
+            return "none"
+
+        if light_state.upper() != "RED":
+            return "none"
+
         if not self._is_moving_correct_direction(history):
-            return False
-            
-        # === BƯỚC 6: Kiểm tra cắt vạch bằng vector crossing ===
+            return "none"
+
+        # Nếu xe đã tham gia vùng rẽ phải, hủy vi phạm cũ nếu có
+        if self._has_entered_right_turn_zone(history):
+            if v_id in self.violated_ids:
+                self.violated_ids.remove(v_id)
+                self.canceled_ids.add(v_id)
+                return "cancel"
+            return "none"
+
+        if v_id in self.violated_ids:
+            return "none"
+
         if not self._check_vector_crossing(history):
-            return False
-            
-        # === BƯỚC 7: Kiểm tra xe có đang rẽ phải hợp lệ không ===
+            return "none"
+
         if self._is_right_turning(history):
-            return False
-            
-        # === TẤT CẢ ĐIỀU KIỆN THỎA MÃN => VI PHẠM ===
-        self.reported_ids.add(v_id)
-        return True
+            return "none"
+
+        self.violated_ids.add(v_id)
+        return "violation"
 
     def _is_moving_correct_direction(self, history: List[Tuple[int, int]]) -> bool:
         """
@@ -109,7 +115,16 @@ class ViolationManager:
     def reset(self):
         """Xóa toàn bộ lịch sử và trạng thái vi phạm."""
         self.vehicle_history.clear()
-        self.reported_ids.clear()
+        self.violated_ids.clear()
+        self.canceled_ids.clear()
+
+    def _has_entered_right_turn_zone(self, history: List[Tuple[int, int]]) -> bool:
+        """Kiểm tra nếu xe đã vào vùng rẽ phải trong lịch sử gần nhất."""
+        polygon = self.right_turn_zone.get_polygon()
+        for pt in history[-self.HISTORY_LENGTH:]:
+            if is_point_in_polygon(pt, polygon):
+                return True
+        return False
 
     def _is_right_turning(self, history):
 
@@ -123,7 +138,7 @@ class ViolationManager:
             if is_point_in_polygon(pt, polygon):
                 inside_count += 1
 
-        if inside_count < 3:
+        if inside_count < 2:
             return False
 
         dx = recent_points[-1][0] - recent_points[0][0]
