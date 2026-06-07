@@ -29,3 +29,11 @@ runs/
 data/output/*
 !data/output/.gitkeep
 data/traffic_light/datasets/
+
+# Local Violation Storage (Thành viên 3)
+Luutru_Vipham/
+*.jpg
+*.jpeg
+*.png
+*.pnj
+

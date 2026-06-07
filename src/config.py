@@ -37,6 +37,14 @@ class SystemConfig:
         self.json_log_path: str = self.output.get("json_log_path", "data/output/violations.json")
         self.webhook_url: str = self.output.get("webhook_url", "")
         
+        # Storage settings (Thành viên 3)
+        self.storage: Dict[str, Any] = self.config_data.get("storage", {})
+        self.storage_root_dir: str = self.storage.get("root_dir", "Luutru_Vipham")
+        self.save_clips: bool = self.storage.get("save_clips", True)
+        self.clip_before_sec: float = self.storage.get("clip_before_sec", 1.0)
+        self.clip_after_sec: float = self.storage.get("clip_after_sec", 2.0)
+        self.save_scene_frame: bool = self.storage.get("save_scene_frame", True)
+        
         # Ensure directories exist
         self._ensure_directories()
 

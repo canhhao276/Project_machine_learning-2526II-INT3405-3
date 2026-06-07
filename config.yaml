@@ -40,3 +40,11 @@ output:
   save_logs: true
   json_log_path: "data/output/violations.json"
   webhook_url: ""
+
+# Storage Configurations (Thành viên 3)
+storage:
+  root_dir: "Luutru_Vipham"
+  save_clips: true
+  clip_before_sec: 1
+  clip_after_sec: 2
+  save_scene_frame: true

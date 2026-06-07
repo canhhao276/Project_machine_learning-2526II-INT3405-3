@@ -1,7 +1,4 @@
 """
-========================================================================
-[NHIỆM VỤ KỸ THUẬT CỦA THÀNH VIÊN 3: STORAGE & TESTING ENGINEER]
-========================================================================
 Module này thực hiện:
   1. Thiết kế cấu trúc thư mục phân loại ảnh vi phạm tự động:
          Luutru_Vipham/
@@ -67,19 +64,69 @@ def _build_save_path(root_dir: str, vehicle_id: int, vehicle_type: str,
                      frame_idx: int, timestamp: float) -> str:
     """
     Xây dựng đường dẫn lưu file ảnh vi phạm theo cấu trúc:
-        <root_dir>/<YYYY-MM-DD>/Vuot_Den_Do/<filename>.jpg
+        <root_dir>/<YYYY-MM-DD>/Vuot_Den_Do/<folder_name>/<filename>.jpg
 
     Tên file: VehicleID_{id}_{type}_F{frame:05d}_{datetime}.jpg
     Ví dụ:    VehicleID_42_car_F00123_20250525_143201.jpg
     """
     date_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
     time_str = datetime.fromtimestamp(timestamp).strftime("%Y%m%d_%H%M%S")
+    folder_name = f"VehicleID_{vehicle_id}_{vehicle_type}_F{frame_idx:05d}_{time_str}"
 
-    save_dir = os.path.join(root_dir, date_str, "Vuot_Den_Do")
+    save_dir = os.path.join(root_dir, date_str, "Vuot_Den_Do", folder_name)
     os.makedirs(save_dir, exist_ok=True)
 
-    filename = f"VehicleID_{vehicle_id}_{vehicle_type}_F{frame_idx:05d}_{time_str}.jpg"
+    filename = f"{folder_name}.jpg"
     return os.path.join(save_dir, filename)
+
+
+def _overlay_crop_on_scene(scene_img: np.ndarray, crop_img: np.ndarray, offset: int = 20, max_size: int = 220) -> None:
+    """
+    Gộp ảnh crop vào góc trên bên trái của ảnh toàn cảnh (scene_img) với khoảng cách (offset).
+    Tự động resize ảnh crop nếu kích thước vượt quá max_size (vẫn giữ tỉ lệ).
+    """
+    if scene_img is None or crop_img is None:
+        return
+
+    sh, sw = scene_img.shape[:2]
+    ch, cw = crop_img.shape[:2]
+
+    # Resize crop_img nếu vượt quá max_size
+    if max(ch, cw) > max_size:
+        scale = max_size / max(ch, cw)
+        new_w = int(cw * scale)
+        new_h = int(ch * scale)
+        crop_resized = cv2.resize(crop_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    else:
+        crop_resized = crop_img.copy()
+
+    cr_h, cr_w = crop_resized.shape[:2]
+
+    # Đảm bảo ảnh crop nhỏ hơn ảnh scene
+    if cr_h + offset * 2 > sh or cr_w + offset * 2 > sw:
+        return
+
+    # Vẽ viền trắng xung quanh ảnh crop
+    border_size = 2
+    cv2.rectangle(
+        scene_img,
+        (offset - border_size, offset - border_size),
+        (offset + cr_w + border_size - 1, offset + cr_h + border_size - 1),
+        (255, 255, 255),
+        -1
+    )
+    # Vẽ viền đỏ mỏng ngoài cùng
+    cv2.rectangle(
+        scene_img,
+        (offset - border_size - 1, offset - border_size - 1),
+        (offset + cr_w + border_size, offset + cr_h + border_size),
+        (0, 0, 255),
+        1
+    )
+
+    # Đè ảnh crop lên vùng tương ứng
+    scene_img[offset : offset + cr_h, offset : offset + cr_w] = crop_resized
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -247,13 +294,15 @@ class ViolationExporter:
         json_path:   str = DEFAULT_JSON_PATH,
         webhook_url: str = "",
         root_dir:    str = DEFAULT_ROOT_DIR,
-        save_crops:  bool = True,
+        save_crops:  bool = False,
+        save_scene_frame: bool = True,
     ):
         self.json_path   = json_path
         self.csv_path    = os.path.splitext(json_path)[0] + ".csv"
         self.webhook_url = webhook_url
         self.root_dir    = root_dir
         self.save_crops  = save_crops
+        self.save_scene_frame = save_scene_frame
 
         # Đảm bảo thư mục output tồn tại
         os.makedirs(os.path.dirname(json_path) or ".", exist_ok=True)
@@ -289,7 +338,7 @@ class ViolationExporter:
     def _csv_fields() -> List[str]:
         return [
             "vehicle_id", "vehicle_type", "frame", "timestamp",
-            "datetime", "confidence", "bbox", "crop_path"
+            "datetime", "confidence", "bbox", "crop_path", "scene_path"
         ]
 
     # ── KHỞI TẠO FILE JSON ───────────────────────────────────
@@ -331,16 +380,27 @@ class ViolationExporter:
 
             # ── 1. CROP VÀ LƯU ẢNH ───────────────────────────
             crop_path = ""
-            if self.save_crops and frame is not None:
+            crop_img = None
+            if frame is not None:
+                # Luôn crop để gộp vào scene frame (nếu có cấu hình)
                 crop_img = _safe_crop(frame, bbox, padding=CROP_PADDING)
                 if crop_img is not None:
-                    crop_path = _build_save_path(
-                        self.root_dir, v_id, v_type, frame_idx, timestamp
-                    )
-                    # Vẽ thông tin lên ảnh crop trước khi lưu
+                    # Vẽ thông tin lên ảnh crop trước khi lưu/gộp
                     _annotate_crop(crop_img, v_id, v_type, frame_idx, confidence)
-                    cv2.imwrite(crop_path, crop_img, [cv2.IMWRITE_JPEG_QUALITY, 92])
-                    print(f"[Exporter] ✓ Đã lưu ảnh: {crop_path}")
+                    
+                    if self.save_crops:
+                        crop_path = _build_save_path(
+                            self.root_dir, v_id, v_type, frame_idx, timestamp
+                        )
+                        cv2.imwrite(crop_path, crop_img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+                        print(f"[Exporter] ✓ Đã lưu ảnh crop: {crop_path}")
+
+            # ── 1b. LƯU ẢNH TOÀN CẢNH (SCENE) ───────────────
+            scene_path = ""
+            if self.save_scene_frame and frame is not None:
+                scene_path = self._save_scene_frame(
+                    frame, v_id, v_type, frame_idx, timestamp, bbox, crop_img
+                )
 
             # ── 2. XÂY DỰNG BẢN GHI ─────────────────────────
             record = {
@@ -352,6 +412,7 @@ class ViolationExporter:
                 "confidence":   round(confidence, 4),
                 "bbox":         bbox,
                 "crop_path":    crop_path,
+                "scene_path":   scene_path,
             }
             self._violations.append(record)
 
@@ -393,6 +454,7 @@ class ViolationExporter:
                 "confidence":   record["confidence"],
                 "bbox":         str(record["bbox"]),
                 "crop_path":    record["crop_path"],
+                "scene_path":   record.get("scene_path", ""),
             })
 
     def _rewrite_csv(self) -> None:
@@ -409,6 +471,7 @@ class ViolationExporter:
                     "confidence":   record["confidence"],
                     "bbox":         str(record["bbox"]),
                     "crop_path":    record["crop_path"],
+                    "scene_path":   record.get("scene_path", ""),
                 })
 
     def remove_violation(self, vehicle_id: int) -> bool:
@@ -419,12 +482,36 @@ class ViolationExporter:
             if record["vehicle_id"] == vehicle_id:
                 removed = True
                 crop_path = record.get("crop_path", "")
+                scene_path = record.get("scene_path", "")
+
+                # Xóa ảnh crop
                 if crop_path and os.path.exists(crop_path):
                     try:
                         os.remove(crop_path)
                         print(f"[Exporter] ✓ Đã xóa ảnh vi phạm: {crop_path}")
                     except Exception as e:
                         print(f"[Exporter] ✗ Không xóa được ảnh {crop_path}: {e}")
+
+                # Xóa ảnh toàn cảnh
+                if scene_path and os.path.exists(scene_path):
+                    try:
+                        os.remove(scene_path)
+                        print(f"[Exporter] ✓ Đã xóa ảnh toàn cảnh: {scene_path}")
+                    except Exception as e:
+                        print(f"[Exporter] ✗ Không xóa được ảnh toàn cảnh {scene_path}: {e}")
+
+                # Xóa thư mục trống nếu có
+                path_for_dir = crop_path if crop_path else scene_path
+                if path_for_dir:
+                    folder_path = os.path.dirname(path_for_dir)
+                    if os.path.exists(folder_path) and os.path.isdir(folder_path):
+                        try:
+                            # Chỉ xóa nếu thư mục hoàn toàn trống (không còn file/clip nào)
+                            if not os.listdir(folder_path):
+                                os.rmdir(folder_path)
+                                print(f"[Exporter] ✓ Đã xóa thư mục trống: {folder_path}")
+                        except Exception as e:
+                            pass
                 continue
             remaining.append(record)
 
@@ -447,6 +534,58 @@ class ViolationExporter:
                 print(f"[Webhook] ✗ HTTP {resp.status_code}")
         except Exception as e:
             print(f"[Webhook] ✗ Lỗi: {e}")
+
+    # ── LƯU ẢNH TOÀN CẢNH (SCENE FRAME) ──────────────────────
+
+    def _save_scene_frame(
+        self,
+        frame: np.ndarray,
+        vehicle_id: int,
+        vehicle_type: str,
+        frame_idx: int,
+        timestamp: float,
+        bbox: List[int],
+        crop_img: Optional[np.ndarray] = None,
+    ) -> str:
+        """
+        Lưu ảnh toàn cảnh (full-frame) tại thời điểm vi phạm.
+        Vẽ bbox và nhãn xe vi phạm lên ảnh trước khi lưu.
+        Nếu truyền crop_img, đè crop_img lên góc trên bên trái một khoảng.
+        Trả về đường dẫn file đã lưu.
+        """
+        try:
+            scene_img = frame.copy()
+
+            # Vẽ bbox xe vi phạm lên ảnh toàn cảnh
+            x1, y1, x2, y2 = bbox
+            cv2.rectangle(scene_img, (x1, y1), (x2, y2), (0, 0, 255), 3)
+            label = f"VIOLATION #{vehicle_id} {vehicle_type.upper()}"
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+            cv2.rectangle(scene_img, (x1, y1 - th - 10), (x1 + tw + 6, y1), (0, 0, 255), -1)
+            cv2.putText(scene_img, label, (x1 + 3, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+
+            # Gộp ảnh crop lên góc trên bên trái nếu có
+            if crop_img is not None:
+                _overlay_crop_on_scene(scene_img, crop_img, offset=20, max_size=220)
+
+            # Xây dựng đường dẫn lưu
+            date_str = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
+            time_str = datetime.fromtimestamp(timestamp).strftime("%Y%m%d_%H%M%S")
+            folder_name = f"VehicleID_{vehicle_id}_{vehicle_type}_F{frame_idx:05d}_{time_str}"
+            save_dir = os.path.join(self.root_dir, date_str, "Vuot_Den_Do", folder_name)
+            os.makedirs(save_dir, exist_ok=True)
+
+            filename = f"{folder_name}_scene.jpg"
+            scene_path = os.path.join(save_dir, filename)
+
+            cv2.imwrite(scene_path, scene_img, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            print(f"[Exporter] ✓ Đã lưu ảnh toàn cảnh: {scene_path}")
+            return scene_path
+
+        except Exception as e:
+            print(f"[Exporter] ✗ Lỗi lưu ảnh toàn cảnh: {e}")
+            return ""
 
     # ── TRUY VẤN ─────────────────────────────────────────────
 
@@ -486,6 +625,19 @@ class ViolationExporter:
         print(f"  File JSON log                  : {os.path.abspath(self.json_path)}")
         print(f"  File CSV  log                  : {os.path.abspath(self.csv_path)}")
 
+        # In danh sách chi tiết từng vi phạm (cho Thành viên 4 làm báo cáo)
+        if self._violations:
+            line = "─" * 50
+            print(f"\n  {line}")
+            print(f"  DANH SÁCH CHI TIẾT CÁC VI PHẠM ĐÃ GHI NHẬN:")
+            print(f"  {line}")
+            print(f"  {'STT':<5} {'ID xe':<8} {'Loại':<12} {'Frame':<8} {'Thời điểm':<20} {'Conf':<8}")
+            print(f"  {line}")
+            for idx, v in enumerate(self._violations, 1):
+                print(f"  {idx:<5} #{v['vehicle_id']:<7} {v['vehicle_type']:<12} "
+                      f"F{v['frame']:<7} {v['datetime']:<20} {v['confidence']:.4f}")
+            print(f"  {line}")
+
         if true_positives is not None and false_positives is not None:
             self.metrics.set_detections(true_positives, false_positives)
         if total_actual is not None:
@@ -502,6 +654,10 @@ class ViolationExporter:
             print(f"   rồi gọi exporter.print_summary(total_actual=...,")
             print(f"   true_positives=..., false_positives=...))")
             print(sep)
+
+    def get_all_violations(self) -> List[Dict[str, Any]]:
+        """Trả về toàn bộ danh sách vi phạm (cho benchmark script)."""
+        return self._violations.copy()
 
     def reset(self) -> None:
         """Xóa toàn bộ bộ nhớ trong session (không xóa file đã ghi)."""

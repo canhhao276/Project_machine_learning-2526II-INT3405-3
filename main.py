@@ -14,6 +14,7 @@ from src.core.tracker import VehicleTracker
 from src.core.violation_detector import ViolationDetector
 from src.utils.visualization import Visualizer
 from src.api.exporter import ViolationExporter
+from src.storage.video_clip_extractor import ViolationClipExtractor
 
 
 def run_pipeline(video_path: str, show_preview: bool = False,
@@ -75,13 +76,25 @@ def run_pipeline(video_path: str, show_preview: bool = False,
         right_turn_zone=config.right_turn_zone
     )
     
-    # ── THÀNH VIÊN 3: khởi tạo exporter ─────────────────────
+    #khởi tạo exporter
     exporter = ViolationExporter(
         json_path=config.json_log_path,
         webhook_url=config.webhook_url,
-        root_dir="Luutru_Vipham",
-        save_crops=True,
+        root_dir=config.storage_root_dir,
+        save_crops=False,
+        save_scene_frame=config.save_scene_frame,
     )
+    
+    # khởi tạo clip extractor
+    clip_extractor = None
+    if config.save_clips:
+        clip_extractor = ViolationClipExtractor(
+            fps=fps,
+            clip_before_sec=config.clip_before_sec,
+            clip_after_sec=config.clip_after_sec,
+            root_dir=config.storage_root_dir,
+            frame_size=(width, height),
+        )
     
     print("=" * 60)
     print("  PIPELINE READY — PROCESSING FRAMES")
@@ -116,11 +129,17 @@ def run_pipeline(video_path: str, show_preview: bool = False,
                 print(f"[VIOLATION] Vehicle ID #{violation['vehicle_id']} "
                       f"({violation['vehicle_type'].upper()}) at Frame {frame_idx}")
                 exporter.export_event(violation, frame=frame)   # ← truyền frame
+                # THÀNH VIÊN 3: trigger clip extractor
+                if clip_extractor:
+                    clip_extractor.trigger_violation(violation)
 
             # E. Hủy vi phạm khi xe đi vào vùng rẽ phải sau khi đã bị đánh dấu
             for vehicle_id in cancelled_violations:
                 print(f"[CANCEL] Vehicle ID #{vehicle_id} entered right-turn zone, removing previous violation")
                 exporter.remove_violation(vehicle_id)
+                # THÀNH VIÊN 3: hủy clip đang thu
+                if clip_extractor:
+                    clip_extractor.cancel_clip(vehicle_id)
                 
             # E. Vẽ overlay
             annotated_frame = visualizer.draw_scene(
@@ -135,8 +154,12 @@ def run_pipeline(video_path: str, show_preview: bool = False,
             # F. Ghi video output
             if config.save_video:
                 video_handler.write_frame(annotated_frame)
+
+            # G. THÀNH VIÊN 3: đẩy frame vào ring buffer của clip extractor
+            if clip_extractor:
+                clip_extractor.push_frame(annotated_frame)
                 
-            # G. FPS tracker tick
+            # H. FPS tracker tick
             exporter.fps_tracker.tick()
 
             # H. Preview with real-time speed synchronization
@@ -173,6 +196,10 @@ def run_pipeline(video_path: str, show_preview: bool = False,
         video_handler.release_all()
         if show_preview:
             cv2.destroyAllWindows()
+        
+        # ── THÀNH VIÊN 3: finalize clip extractor ───────────
+        if clip_extractor:
+            clip_extractor.finalize()
             
         # ── THÀNH VIÊN 3: in báo cáo tổng kết ───────────────
         exporter.print_summary(
