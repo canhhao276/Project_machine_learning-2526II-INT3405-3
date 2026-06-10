@@ -1,7 +1,7 @@
 # Deep Learning Models
 models:
   vehicle_model: "yolov8s.pt"
-  traffic_light_model: "src/models/traffic_light_best.pt"
+  traffic_light_model: "yolov8s.pt"
 
 # Detection Thresholds
 thresholds:
@@ -28,7 +28,7 @@ scene:
   traffic_light_roi: []
   
   # Đã xóa tọa độ cố định để AI tự động dò tìm hộp đèn động theo thời gian thực
-  static_traffic_lights: [[1220, 66, 1260, 160]]
+  static_traffic_lights: [[1215, 30, 1260, 180]]
   
   # Độ phân giải chuẩn hóa mục tiêu cho tất cả video đầu vào
   target_resolution: [1280, 720]
