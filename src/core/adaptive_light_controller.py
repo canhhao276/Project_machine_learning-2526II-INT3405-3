@@ -39,6 +39,21 @@ class AdaptiveLightController:
         self.last_predicted_density = 0
         self.last_prediction_probs = [0.0, 0.0, 0.0]
         
+        self.has_synced_initial_state = False
+
+    def initialize_state(self, physical_state: str):
+        if not self.has_synced_initial_state and physical_state in ["RED", "GREEN", "YELLOW"]:
+            self.current_state = physical_state
+            if physical_state == "RED":
+                self.time_remaining = self.default_red
+            elif physical_state == "GREEN":
+                self.time_remaining = self.default_green
+            elif physical_state == "YELLOW":
+                self.time_remaining = self.default_yellow
+            self.has_synced_initial_state = True
+            print(f"[Controller] Đã đồng bộ trạng thái ban đầu theo đèn vật lý: {physical_state}")
+            
+
     def predict_density(self, motorcycle_count: int, car_count: int, stopped_vehicles: int, pcu_load: float, average_speed: float) -> int:
         """
         Dự đoán lớp mật độ giao thông sử dụng SVM.
@@ -61,11 +76,11 @@ class AdaptiveLightController:
                 print(f"[AdaptiveLightController] SVM Prediction error: {e}")
                 
         # Phân loại theo luật dự phòng nếu SVM chưa load được
-        if pcu_load == 0:
+        if pcu_load <= 1.0:
             pred = 0
         elif stopped_vehicles == 0:
             pred = 1
-        elif pcu_load <= 0.6:
+        elif pcu_load <= 4.0:
             pred = 1
         else:
             pred = 2

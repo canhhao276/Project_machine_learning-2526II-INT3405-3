@@ -168,6 +168,10 @@ def run_pipeline(video_path: str, mode: str = "violation", show_preview: bool = 
                 lights = traffic_light_detector.detect_and_classify(frame.copy())
                 physical_light_state = traffic_light_detector.get_global_traffic_light_state(lights)
                 
+                # Đồng bộ trạng thái ban đầu cho bộ điều khiển đèn giả lập
+                if adaptive_controller:
+                    adaptive_controller.initialize_state(physical_light_state)
+                    
                 # Phát hiện vi phạm vượt đèn đỏ
                 new_violations, cancelled_violations = violation_detector.process_frame(
                     tracked_vehicles=tracked_vehicles,
