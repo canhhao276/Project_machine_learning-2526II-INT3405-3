@@ -10,6 +10,7 @@ class Visualizer:
     1. 'violation': Chỉ hiển thị hộp đèn vật lý và bắt lỗi vượt đèn đỏ thực tế.
     2. 'adaptive': Chỉ hiển thị giả lập đèn ảo thông minh thích ứng theo lưu lượng xe và Queue ROI.
     """
+
     def __init__(self, stop_line: List[int], right_turn_zone: List[List[int]] = None):
         self.stop_line = stop_line
         

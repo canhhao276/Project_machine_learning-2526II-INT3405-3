@@ -150,6 +150,15 @@ def run_pipeline(video_path: str, mode: str = "violation", show_preview: bool = 
             # 1. Bám vết xe (Dùng chung cho cả 2 nhánh)
             tracked_vehicles = vehicle_tracker.track(frame)
             
+            # Mở rộng bounding box lên trên cho xe máy để lấy cả người lái
+            # Thực hiện ở đây để ảnh crop lưu trữ và vẽ UI đều nhận box đã mở rộng
+            for v in tracked_vehicles:
+                if v["class_name"] == "motorcycle":
+                    x1, y1, x2, y2 = v["box"]
+                    box_h = y2 - y1
+                    new_y1 = max(int(y1 - box_h * 0.6), 0)
+                    v["box"] = [x1, new_y1, x2, y2]
+            
             # ---------------------------------------------
             # NHÁNH A: PHÁT HIỆN VƯỢT ĐÈN ĐỎ VẬT LÝ (VIOLATION)
             # ---------------------------------------------
