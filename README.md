@@ -115,18 +115,19 @@ pip install -r requirements.txt
 ### Bước 2: Khởi chạy pipeline
 
 ```powershell
+Bạn có thể chạy thử nghiệm với bất kỳ video nào trong thư mục `data/input/` (ví dụ: `detection1.mp4` hoặc `detection2.mp4`) bằng cách chỉ định tham số `--video`:
+
+```powershell
 # Chế độ phát hiện vượt đèn đỏ (mặc định)
-python main.py --mode violation --video data/input/traffic.mp4
+python main.py --mode violation --video data/input/<ten_video>.mp4 --preview
 
 # Chế độ điều khiển đèn thích ứng theo mật độ xe
-python main.py --mode adaptive --video data/input/traffic.mp4
+python main.py --mode adaptive --video data/input/<ten_video>.mp4 --preview
 
-# Chế độ so sánh song song cả 2 chức năng (frame 1920×540)
-python main.py --mode compare --video data/input/traffic.mp4
-
-# Bật xem trước thời gian thực (nhấn Q để dừng)
-python main.py --mode violation --video data/input/traffic.mp4 --preview
+# Chế độ so sánh song song cả 2 chức năng (Side-by-Side)
+python main.py --mode compare --video data/input/<ten_video>.mp4 --preview
 ```
+*(Thay thế `<ten_video>.mp4` bằng tên file video thực tế của bạn, ví dụ: `detection1.mp4` hoặc `detection2.mp4`)*
 
 ### Bước 3: Xem kết quả đầu ra
 

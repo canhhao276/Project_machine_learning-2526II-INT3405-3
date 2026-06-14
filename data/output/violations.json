@@ -1,18 +1,1 @@
-[
-  {
-    "vehicle_id": 34,
-    "vehicle_type": "motorcycle",
-    "frame": 1310,
-    "timestamp": 1781323492.862,
-    "datetime": "2026-06-13 11:04:52",
-    "confidence": 0.7533,
-    "bbox": [
-      900,
-      297,
-      983,
-      486
-    ],
-    "crop_path": "",
-    "scene_path": "Luutru_Vipham\\2026-06-13\\Vuot_Den_Do\\VehicleID_34_motorcycle_F01310_20260613_110452\\VehicleID_34_motorcycle_F01310_20260613_110452_scene.jpg"
-  }
-]
+[]
