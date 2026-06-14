@@ -21,6 +21,9 @@ runs/
 
 # Large videos and media files
 *.mp4
+!data/input/detection1.mp4
+!data/input/detection2.mp4
+!data/input/.gitkeep
 *.avi
 *.mkv
 *.mov
