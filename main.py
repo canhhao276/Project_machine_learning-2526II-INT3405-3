@@ -354,8 +354,8 @@ def run_pipeline(video_path: str, mode: str = "violation", show_preview: bool = 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Traffic Violation Detection & Adaptive Signal Control")
     parser.add_argument("--video", type=str, default="")
-    parser.add_argument("--mode", type=str, default="violation", choices=["violation", "compare"],
-                        help="Chế độ chạy: 'violation' (chỉ bắt vượt đèn đỏ thực tế), 'compare' (so sánh song song)")
+    parser.add_argument("--mode", type=str, default="violation", choices=["violation", "adaptive", "compare"],
+                        help="Chế độ chạy: 'violation' (chỉ bắt vượt đèn đỏ thực tế), 'adaptive' (chỉ điều khiển thích ứng), 'compare' (so sánh song song)")
     parser.add_argument("--preview", action="store_true")
     # Tham số đối chiếu thủ công
     parser.add_argument("--total-actual", type=int, default=None,
